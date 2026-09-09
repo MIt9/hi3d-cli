@@ -1,5 +1,5 @@
 /**
- * Hi3D Models & Enum Constants
+ * Hi3D Models, Enum Constants, and Capabilities
  * Official API Domain: https://api.hitem3d.ai
  */
 
@@ -24,8 +24,8 @@ export const ENDPOINTS = {
 
 export const REQUEST_TYPES = {
   1: "mesh (geometry only)",
-  2: "texture (textured model from geometry)",
-  3: "both (geometry + texture)",
+  2: "texture (staged: texture based on existing geometry)",
+  3: "both (all-in-one: geometry + texture)",
 };
 
 export const FORMAT_MAP = {
@@ -35,6 +35,9 @@ export const FORMAT_MAP = {
   fbx: 4,
   usdz: 5,
   "3mf": 6,
+  exr: 7,
+  png: 8,
+  bmp: 9,
 };
 
 export const FORMAT_NAMES = {
@@ -44,9 +47,20 @@ export const FORMAT_NAMES = {
   4: "fbx",
   5: "usdz",
   6: "3mf",
+  7: "exr",
+  8: "png",
+  9: "bmp",
+};
+
+export const CATEGORY_FORMATS = {
+  "image-to-3d": ["obj", "glb", "stl", "fbx", "usdz", "3mf"],
+  "relief": ["exr", "png", "stl", "glb", "3mf", "bmp"],
+  "split": ["obj", "glb", "stl", "fbx", "usdz"],
+  "multicolor": ["obj", "glb", "fbx", "3mf"],
 };
 
 export const MODELS = [
+  // General Models
   {
     id: "hi3dv3.0",
     name: "Hi3D v3.0",
@@ -79,10 +93,12 @@ export const MODELS = [
     resolutions: ["512", "1024", "1536", "1536pro"],
     supportsPbr: false,
   },
+
+  // Portrait Models
   {
     id: "scene-portraitv2.1",
     name: "Scene Portrait v2.1",
-    category: "scene",
+    category: "portrait",
     defaultResolution: "1536pro",
     resolutions: ["1536profast", "1536pro"],
     supportsPbr: true,
@@ -90,7 +106,7 @@ export const MODELS = [
   {
     id: "scene-portraitv2.0",
     name: "Scene Portrait v2.0",
-    category: "scene",
+    category: "portrait",
     defaultResolution: "1536pro",
     resolutions: ["1536pro"],
     supportsPbr: true,
@@ -98,9 +114,55 @@ export const MODELS = [
   {
     id: "scene-portraitv1.5",
     name: "Scene Portrait v1.5",
-    category: "scene",
+    category: "portrait",
     defaultResolution: "1536",
     resolutions: ["1536"],
+    supportsPbr: false,
+  },
+
+  // Depth Map / Relief Models
+  {
+    id: "pro",
+    name: "Depth Map Model (Pro)",
+    category: "relief",
+    defaultResolution: "Pro",
+    resolutions: ["Base", "Pro"],
+    supportsPbr: false,
+  },
+  {
+    id: "base",
+    name: "Depth Map Model (Base)",
+    category: "relief",
+    defaultResolution: "Base",
+    resolutions: ["Base", "Pro"],
+    supportsPbr: false,
+  },
+
+  // Split Models
+  {
+    id: "character",
+    name: "Split Model (Character)",
+    category: "split",
+    defaultResolution: "default",
+    resolutions: ["default"],
+    supportsPbr: false,
+  },
+  {
+    id: "general",
+    name: "Split Model (General)",
+    category: "split",
+    defaultResolution: "default",
+    resolutions: ["default"],
+    supportsPbr: false,
+  },
+
+  // Multicolor Models
+  {
+    id: "multicolor",
+    name: "Multicolor Model",
+    category: "multicolor",
+    defaultResolution: "default",
+    resolutions: ["default"],
     supportsPbr: false,
   },
 ];

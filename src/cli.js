@@ -1,5 +1,5 @@
 /**
- * Hi3D CLI — Node.js CLI tool for generating 3D models (GLB, OBJ, STL, FBX, USDZ, 3MF) via Hi3D API (api.hitem3d.ai).
+ * Hi3D CLI — Node.js CLI tool for generating 3D models (GLB, OBJ, STL, FBX, USDZ, 3MF, EXR, PNG, BMP) via Hi3D API (api.hitem3d.ai).
  * Argument parser hand-rolled with zero runtime dependencies.
  */
 
@@ -8,10 +8,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { Hi3DClient, Hi3DError, downloadFile } from "./client.js";
-import { FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
+import { CATEGORY_FORMATS, FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
 import { CONFIG_PATH, loadConfig, runSetup, saveConfig } from "./setup.js";
 
-export const VERSION = "0.1.6";
+export const VERSION = "0.1.7";
 
 export class UsageError extends Error {
   constructor(msg) {
@@ -90,15 +90,15 @@ COMMANDS:
   config                           View or set CLI configuration (e.g. hi3d config --set-access-key AK --set-secret-key SK)
   token                            Obtain or refresh JWT access token
   balance | credits                Check account credit balance
-  models                           List supported Hi3D models & resolutions
+  models                           List supported Hi3D models, categories & formats
   run | generate <category>       Submit 3D generation task
   status | query <task_id>        Query status of a 3D generation task
 
 CATEGORIES (for run/generate):
-  image-to-3d                      Generate 3D model from single or multi-view image (default)
-  relief                           Generate 3D relief / depth model
-  split                            Split 3D model into parts
-  multicolor                       Generate 3D multicolor model
+  image-to-3d                      Image to 3D / Multi-view to 3D (Formats: obj, glb, stl, fbx, usdz, 3mf)
+  relief                           Image to 3D Relief (Formats: exr, png, stl, glb, 3mf, bmp)
+  split                            3D Model Split (Formats: obj, glb, stl, fbx, usdz)
+  multicolor                       3D Model Multicolor (Formats: obj, glb, fbx, 3mf)
 
 OPTIONS:
   --access-key <key>               Hi3D Access Key (ak_...)
@@ -106,10 +106,10 @@ OPTIONS:
   --image <path>                   Input single image file
   --multi-images <path1,path2>     Input multiple view image files (up to 4)
   --multi-images-bit <bit>         Bitmap string for multi_images (e.g. 1010)
-  --model <model_id>               Model version (default: hi3dv3.0)
-  --request-type <1|2|3>           1: mesh, 2: texture, 3: both (default: 3)
-  --format <obj|glb|stl|fbx|usdz|3mf> Output 3D format (default: glb)
-  --resolution <tier>              Resolution (e.g. 2048quality, 2048master)
+  --model <model_id>               Model version (e.g. hi3dv3.0, hitem3dv2.1, scene-portraitv2.1)
+  --request-type <1|2|3>           1: mesh, 2: texture (staged), 3: both (all-in-one, default: 3)
+  --format <format>                Output format (obj, glb, stl, fbx, usdz, 3mf, exr, png, bmp)
+  --resolution <tier>              Resolution tier (e.g. 2048quality, 2048master, 1536pro, 1536fast)
   --pbr <0|1>                      PBR texture switch (default: 1)
   --face <count>                   Face count (100000..5000000)
   --shading <float>                De-shading strength (0.0..1.0, default 0.5)
@@ -122,10 +122,11 @@ OPTIONS:
 
 EXAMPLES:
   hi3d setup
-  hi3d config --set-access-key ak_c8ef... --set-secret-key sk_...
   hi3d balance
   hi3d run image-to-3d --image ./chair.png --format obj --wait --download ./models
-  hi3d run relief --image ./portrait.png --resolution 1536pro --wait
+  hi3d run relief --image ./portrait.png --format stl --resolution Pro --wait
+  hi3d run split --image ./character.png --model character --format fbx --wait
+  hi3d run multicolor --image ./colored.png --format 3mf --wait
 `);
 }
 
@@ -255,16 +256,19 @@ export async function main(argv = process.argv.slice(2)) {
 
     case "models": {
       if (flags["--json"]) {
-        console.log(JSON.stringify({ models: MODELS, formats: FORMAT_MAP, request_types: REQUEST_TYPES }, null, 2));
+        console.log(JSON.stringify({ models: MODELS, category_formats: CATEGORY_FORMATS, request_types: REQUEST_TYPES }, null, 2));
       } else {
-        console.log("\n📐 Supported Hi3D Models:\n");
+        console.log("\n📐 Hi3D Models & Capabilities:\n");
         for (const m of MODELS) {
           console.log(`  • ${m.id} (${m.name}) [Category: ${m.category}]`);
           console.log(`    Resolutions: ${m.resolutions.join(", ")} (Default: ${m.defaultResolution})`);
           console.log(`    PBR Support: ${m.supportsPbr ? "Yes" : "No"}`);
         }
-        console.log("\nSupported Output Formats:", Object.keys(FORMAT_MAP).join(", "));
-        console.log("Request Types: 1=mesh, 2=texture, 3=both\n");
+        console.log("\nExport Formats by Category:");
+        for (const [cat, fmts] of Object.entries(CATEGORY_FORMATS)) {
+          console.log(`  • ${cat}: ${fmts.join(", ")}`);
+        }
+        console.log("\nRequest Types: 1=mesh (geometry), 2=texture (staged), 3=both (all-in-one)\n");
       }
       break;
     }
@@ -286,7 +290,7 @@ export async function main(argv = process.argv.slice(2)) {
 
       const params = {
         category,
-        model: flags["--model"] || "hi3dv3.0",
+        model: flags["--model"] || (category === "relief" ? "pro" : category === "multicolor" ? "multicolor" : category === "split" ? "general" : "hi3dv3.0"),
         request_type: flags["--request-type"] ? parseInt(flags["--request-type"], 10) : 3,
         format: flags["--format"] || "glb",
         resolution: flags["--resolution"],

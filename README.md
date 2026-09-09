@@ -12,7 +12,7 @@
 [![node](https://img.shields.io/node/v/hi3d-cli.svg)](https://nodejs.org)
 [![license](https://img.shields.io/npm/l/hi3d-cli.svg)](LICENSE)
 
-A lightweight Node.js CLI tool and AI Agent Skill for generating **3D models (GLB, OBJ, STL, FBX, USDZ, 3MF)** via the [Hi3D API](https://docs.hi3d.ai) (`https://api.hitem3d.ai`).
+A lightweight Node.js CLI tool and AI Agent Skill for generating **3D models (GLB, OBJ, STL, FBX, USDZ, 3MF, EXR, PNG, BMP)** via the [Hi3D API](https://docs.hi3d.ai) (`https://api.hitem3d.ai`).
 
 Supports single & multi-view image-to-3D, 3D relief generation, model splitting, and multicolor 3D mesh creation.
 
@@ -59,7 +59,41 @@ hi3d balance
 
 ---
 
-## 📐 Usage & Examples
+## 📐 Models, Resolutions & Capabilities
+
+### Generation Categories:
+• **`image-to-3d`** — Single or Multi-view Image to 3D  
+  - *Modes*: Geometry-only (`1`), Texture staged (`2`), All-in-One (`3`)  
+  - *Export Formats*: `obj`, `glb`, `stl`, `fbx`, `usdz`, `3mf`  
+• **`relief`** — Image to 3D Relief  
+  - *Modes*: All-in-One (`3`)  
+  - *Export Formats*: `exr`, `png`, `stl`, `glb`, `3mf`, `bmp`  
+• **`split`** — 3D Model Split  
+  - *Modes*: All-in-One (`3`)  
+  - *Export Formats*: `obj`, `glb`, `stl`, `fbx`, `usdz`  
+• **`multicolor`** — 3D Model Multicolor  
+  - *Modes*: All-in-One (`3`)  
+  - *Export Formats*: `obj`, `glb`, `fbx`, `3mf`  
+
+### Model Versions & Resolutions:
+• **General Models**:  
+  - `hi3dv3.0`: `2048quality`, `2048master` (PBR support)  
+  - `hitem3dv2.1`: `1536fast`, `1536pro` (PBR support)  
+  - `hitem3dv2.0`: `1536`, `1536pro` (PBR support)  
+  - `hitem3dv1.5`: `512`, `1024`, `1536`, `1536pro`  
+• **Portrait Models**:  
+  - `scene-portraitv2.1`: `1536profast`, `1536pro` (PBR support)  
+  - `scene-portraitv2.0`: `1536pro`  
+  - `scene-portraitv1.5`: `1536`  
+• **Depth Map / Relief Models**:  
+  - `pro`: `Pro` resolution tier  
+  - `base`: `Base` resolution tier  
+• **Split Models**: `character`, `general`  
+• **Multicolor Models**: `multicolor`  
+
+---
+
+## 💻 Usage & Examples
 
 ### 1. Single Image to 3D
 ```bash
@@ -86,34 +120,23 @@ hi3d run image-to-3d \
 ```bash
 hi3d run relief \
   --image ./portrait.png \
-  --resolution 1536pro \
+  --model pro \
+  --resolution Pro \
+  --format stl \
   --wait \
   --download ./reliefs
 ```
 
-### 4. Query Task Status & Download
+### 4. 3D Model Split & Multicolor
+```bash
+hi3d run split --image ./character.png --model character --format fbx --wait
+hi3d run multicolor --image ./colored.png --format 3mf --wait
+```
+
+### 5. Query Task Status & Download
 ```bash
 hi3d status <task_id> --download ./models
 ```
-
----
-
-## 🎨 Supported 3D Formats & Models
-
-### Formats (`--format`):
-- `glb` (Default)
-- `obj`
-- `stl` (3D printing)
-- `fbx`
-- `usdz` (AR / iOS)
-- `3mf` (Multi-color 3D printing)
-
-### Models (`--model`):
-- `hi3dv3.0` (Default, Resolutions: `2048quality`, `2048master`, PBR)
-- `hitem3dv2.1` (Resolutions: `1536fast`, `1536pro`, PBR)
-- `hitem3dv2.0` (Resolutions: `1536`, `1536pro`, PBR)
-- `hitem3dv1.5` (Resolutions: `512`, `1024`, `1536`, `1536pro`)
-- `scene-portraitv2.1` (Scene/Portrait model)
 
 ---
 
@@ -124,5 +147,3 @@ Install the `hi3d-generate` skill into your AI Agent environment (Antigravity, C
 ```bash
 npx -y skills add MIt9/hi3d-skills/hi3d-generate
 ```
-
-This enables AI coding agents to convert photos to 3D models using natural language!
