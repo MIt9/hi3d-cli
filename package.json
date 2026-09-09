@@ -1,0 +1,39 @@
+{
+  "name": "hi3d-cli",
+  "version": "0.1.0",
+  "description": "CLI tool and AI Agent skill for Hi3D API (hitem3d.ai): generate 3D models (GLB, OBJ, STL, FBX, USDZ, 3MF) from images, reliefs, model splitting, and multicolor",
+  "type": "module",
+  "bin": {
+    "hi3d": "bin/hi3d.js",
+    "hi3d-cli": "bin/hi3d.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [
+    "hi3d",
+    "hi3d.ai",
+    "hitem3d",
+    "3d-generation",
+    "image-to-3d",
+    "glb",
+    "obj",
+    "stl",
+    "fbx",
+    "3mf",
+    "cli",
+    "agent-skill"
+  ],
+  "author": "hi3d-cli",
+  "license": "MIT"
+}
