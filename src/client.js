@@ -5,7 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { BASE_URL, ENDPOINTS, FORMAT_MAP } from "./models.js";
+import { BASE_URL, CATEGORY_FORMAT_MAP, ENDPOINTS, FORMAT_MAP } from "./models.js";
 
 export class Hi3DError extends Error {
   constructor(msg, code = null) {
@@ -29,6 +29,8 @@ function guessMimeType(filePath) {
   if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
   if (ext === ".webp") return "image/webp";
   if (ext === ".glb") return "model/gltf-binary";
+  if (ext === ".stl") return "model/stl";
+  if (ext === ".obj") return "model/obj";
   return "application/octet-stream";
 }
 
@@ -134,52 +136,108 @@ export class Hi3DClient {
     const endpoint = ENDPOINTS.submitTask[category] || ENDPOINTS.submitTask["image-to-3d"];
 
     const form = new FormData();
-    form.append("request_type", String(params.request_type ?? 3));
-    form.append("model", params.model || "hi3dv3.0");
+    const catFmtMap = CATEGORY_FORMAT_MAP[category] || CATEGORY_FORMAT_MAP["image-to-3d"];
 
-    if (params.resolution) form.append("resolution", params.resolution);
-    if (params.pbr !== undefined) form.append("pbr", String(params.pbr));
-    if (params.shading !== undefined) form.append("shading", String(params.shading));
-    if (params.face) form.append("face", String(params.face));
+    if (category === "relief") {
+      // Image to 3D Relief (depth-create-task)
+      if (params.model_type || params.model) form.append("model_type", params.model_type || params.model || "pro");
+      if (params.height_relief !== undefined) form.append("height_relief", String(params.height_relief));
+      if (params.rmbg !== undefined) form.append("rmbg", String(params.rmbg));
+      if (params.degree_rmbg !== undefined) form.append("degree_rmbg", String(params.degree_rmbg));
+      if (params.shape_base !== undefined) form.append("shape_base", String(params.shape_base));
+      if (params.thickness_base !== undefined) form.append("thickness_base", String(params.thickness_base));
+      if (params.width !== undefined) form.append("width", String(params.width));
+      if (params.sculpmode !== undefined) form.append("sculpmode", String(params.sculpmode));
+      form.append("response_format", params.response_format || "url");
 
-    if (params.format) {
-      const fmtCode = typeof params.format === "number" ? params.format : (FORMAT_MAP[String(params.format).toLowerCase()] || 2);
+      if (params.imagePath) {
+        const name = path.basename(params.imagePath);
+        const mime = guessMimeType(params.imagePath);
+        const fileBuffer = fs.readFileSync(params.imagePath);
+        form.append("image", new Blob([fileBuffer], { type: mime }), name);
+      } else if (params.image_url || params.imageUrl) {
+        form.append("image_url", params.image_url || params.imageUrl);
+      }
+    } else if (category === "split") {
+      // 3D Model Split (split-create-task)
+      if (params.model) form.append("model", params.model);
+      if (params.part) form.append("part", params.part);
+      if (params.joint) form.append("joint", params.joint);
+      if (params.merge) form.append("merge", params.merge);
+      if (params.level) form.append("level", params.level);
+
+      if (params.meshPath) {
+        const name = path.basename(params.meshPath);
+        const mime = guessMimeType(params.meshPath);
+        const fileBuffer = fs.readFileSync(params.meshPath);
+        form.append("mesh", new Blob([fileBuffer], { type: mime }), name);
+      } else if (params.mesh_url || params.meshUrl) {
+        form.append("mesh_url", params.mesh_url || params.meshUrl);
+      }
+    } else if (category === "multicolor") {
+      // 3D Model Multicolor (multicolor-create-task)
+      if (params.model) form.append("model", params.model);
+      if (params.number_color !== undefined) form.append("number_color", String(params.number_color));
+
+      if (params.meshPath) {
+        const name = path.basename(params.meshPath);
+        const mime = guessMimeType(params.meshPath);
+        const fileBuffer = fs.readFileSync(params.meshPath);
+        form.append("mesh", new Blob([fileBuffer], { type: mime }), name);
+      } else if (params.mesh_url || params.meshUrl) {
+        form.append("mesh_url", params.mesh_url || params.meshUrl);
+      }
+    } else {
+      // Default: image-to-3d
+      form.append("request_type", String(params.request_type ?? 3));
+      form.append("model", params.model || "hi3dv3.0");
+
+      if (params.resolution) form.append("resolution", params.resolution);
+      if (params.pbr !== undefined) form.append("pbr", String(params.pbr));
+      if (params.shading !== undefined) form.append("shading", String(params.shading));
+      if (params.face) form.append("face", String(params.face));
+
+      // Single image upload
+      if (params.imagePath) {
+        const name = path.basename(params.imagePath);
+        const mime = guessMimeType(params.imagePath);
+        const fileBuffer = fs.readFileSync(params.imagePath);
+        form.append("images", new Blob([fileBuffer], { type: mime }), name);
+      }
+
+      // Multi images upload
+      if (Array.isArray(params.multiImagePaths) && params.multiImagePaths.length > 0) {
+        for (const imgPath of params.multiImagePaths) {
+          const name = path.basename(imgPath);
+          const mime = guessMimeType(imgPath);
+          const fileBuffer = fs.readFileSync(imgPath);
+          form.append("multi_images", new Blob([fileBuffer], { type: mime }), name);
+        }
+        if (params.multi_images_bit) {
+          form.append("multi_images_bit", params.multi_images_bit);
+        }
+      }
+
+      // Mesh file / URL for request_type=2
+      if (params.mesh_url || params.meshUrl) form.append("mesh_url", params.mesh_url || params.meshUrl);
+      if (params.meshPath) {
+        const name = path.basename(params.meshPath);
+        const mime = guessMimeType(params.meshPath);
+        const fileBuffer = fs.readFileSync(params.meshPath);
+        form.append("mesh", new Blob([fileBuffer], { type: mime }), name);
+      }
+    }
+
+    // Common format parameter
+    if (params.format !== undefined && params.format !== null) {
+      const fmtCode = typeof params.format === "number" ? params.format : (catFmtMap[String(params.format).toLowerCase()] || catFmtMap["glb"] || 2);
       form.append("format", String(fmtCode));
     } else {
-      form.append("format", "2"); // default glb
+      const defaultCode = catFmtMap["glb"] || 2;
+      form.append("format", String(defaultCode));
     }
 
     if (params.callback_url) form.append("callback_url", params.callback_url);
-
-    // Single image upload
-    if (params.imagePath) {
-      const name = path.basename(params.imagePath);
-      const mime = guessMimeType(params.imagePath);
-      const fileBuffer = fs.readFileSync(params.imagePath);
-      form.append("images", new Blob([fileBuffer], { type: mime }), name);
-    }
-
-    // Multi images upload
-    if (Array.isArray(params.multiImagePaths) && params.multiImagePaths.length > 0) {
-      for (const imgPath of params.multiImagePaths) {
-        const name = path.basename(imgPath);
-        const mime = guessMimeType(imgPath);
-        const fileBuffer = fs.readFileSync(imgPath);
-        form.append("multi_images", new Blob([fileBuffer], { type: mime }), name);
-      }
-      if (params.multi_images_bit) {
-        form.append("multi_images_bit", params.multi_images_bit);
-      }
-    }
-
-    // Mesh file / URL for request_type=2
-    if (params.mesh_url) form.append("mesh_url", params.mesh_url);
-    if (params.meshPath) {
-      const name = path.basename(params.meshPath);
-      const mime = guessMimeType(params.meshPath);
-      const fileBuffer = fs.readFileSync(params.meshPath);
-      form.append("mesh", new Blob([fileBuffer], { type: mime }), name);
-    }
 
     const data = await this._authedFetch(`${this.baseUrl}${endpoint}`, {
       method: "POST",

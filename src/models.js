@@ -9,15 +9,15 @@ export const ENDPOINTS = {
   token: "/open-api/v1/auth/token",
   submitTask: {
     "image-to-3d": "/open-api/v1/submit-task",
-    "relief": "/open-api/v1/depth-submit-task",
-    "split": "/open-api/v1/split-submit-task",
-    "multicolor": "/open-api/v1/multicolor-submit-task",
+    "relief": "/open-api/v1/depth/create-task",
+    "split": "/open-api/v1/split/create-task",
+    "multicolor": "/open-api/v1/muilticolor/create-task",
   },
   queryTask: {
     "image-to-3d": "/open-api/v1/query-task",
-    "relief": "/open-api/v1/depth-query-task",
-    "split": "/open-api/v1/split-query-task",
-    "multicolor": "/open-api/v1/multicolor-query-task",
+    "relief": "/open-api/v1/depth/query-task",
+    "split": "/open-api/v1/split/query-task",
+    "multicolor": "/open-api/v1/muilticolor/query-task",
   },
   balance: "/open-api/v1/balance",
 };
@@ -28,34 +28,28 @@ export const REQUEST_TYPES = {
   3: "both (all-in-one: geometry + texture)",
 };
 
-export const FORMAT_MAP = {
-  obj: 1,
-  glb: 2,
-  stl: 3,
-  fbx: 4,
-  usdz: 5,
-  "3mf": 6,
-  exr: 7,
-  png: 8,
-  bmp: 9,
+/** Category-specific format integer mappings as defined in Hi3D API docs */
+export const CATEGORY_FORMAT_MAP = {
+  "image-to-3d": { obj: 1, glb: 2, stl: 3, fbx: 4, usdz: 5, "3mf": 6 },
+  "relief": { exr: 1, png: 2, stl: 3, glb: 4, "3mf": 5, bmp: 6 },
+  "split": { obj: 1, glb: 2, stl: 3, fbx: 4, usdz: 5, "3mf": 6 },
+  "multicolor": { obj: 1, glb: 2, fbx: 4, "3mf": 6 },
 };
 
-export const FORMAT_NAMES = {
-  1: "obj",
-  2: "glb",
-  3: "stl",
-  4: "fbx",
-  5: "usdz",
-  6: "3mf",
-  7: "exr",
-  8: "png",
-  9: "bmp",
+export const CATEGORY_FORMAT_NAMES = {
+  "image-to-3d": { 1: "obj", 2: "glb", 3: "stl", 4: "fbx", 5: "usdz", 6: "3mf" },
+  "relief": { 1: "exr", 2: "png", 3: "stl", 4: "glb", 5: "3mf", 6: "bmp" },
+  "split": { 1: "obj", 2: "glb", 3: "stl", 4: "fbx", 5: "usdz", 6: "3mf" },
+  "multicolor": { 1: "obj", 2: "glb", 4: "fbx", 6: "3mf" },
 };
+
+export const FORMAT_MAP = CATEGORY_FORMAT_MAP["image-to-3d"];
+export const FORMAT_NAMES = CATEGORY_FORMAT_NAMES["image-to-3d"];
 
 export const CATEGORY_FORMATS = {
   "image-to-3d": ["obj", "glb", "stl", "fbx", "usdz", "3mf"],
   "relief": ["exr", "png", "stl", "glb", "3mf", "bmp"],
-  "split": ["obj", "glb", "stl", "fbx", "usdz"],
+  "split": ["obj", "glb", "stl", "fbx", "usdz", "3mf"],
   "multicolor": ["obj", "glb", "fbx", "3mf"],
 };
 

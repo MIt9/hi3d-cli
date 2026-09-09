@@ -65,14 +65,15 @@ hi3d balance
 • **`image-to-3d`** — Single or Multi-view Image to 3D  
   - *Modes*: Geometry-only (`1`), Texture staged (`2`), All-in-One (`3`)  
   - *Export Formats*: `obj`, `glb`, `stl`, `fbx`, `usdz`, `3mf`  
-• **`relief`** — Image to 3D Relief  
-  - *Modes*: All-in-One (`3`)  
+• **`relief`** — Image to 3D Relief (`/open-api/v1/depth/create-task`)  
+  - *Models*: `pro` (2K), `base` (1K)  
   - *Export Formats*: `exr`, `png`, `stl`, `glb`, `3mf`, `bmp`  
-• **`split`** — 3D Model Split  
-  - *Modes*: All-in-One (`3`)  
-  - *Export Formats*: `obj`, `glb`, `stl`, `fbx`, `usdz`  
-• **`multicolor`** — 3D Model Multicolor  
-  - *Modes*: All-in-One (`3`)  
+  - *Parameters*: `--height-relief` (0.1..50.0), `--rmbg` (0/1), `--degree-rmbg` (0.00..1.00), `--shape-base` (0:square, 1:circle), `--thickness-base` (0.1..20.0 mm), `--width` (20..600 mm), `--sculpmode` (0:emboss, 1:engrave)  
+• **`split`** — 3D Model Split (`/open-api/v1/split/create-task`)  
+  - *Models*: `character` (with `--part` a..f, `--joint` none/ball/dovetail/pin, `--merge` yes/no), `general` (with `--level` low/medium/high)  
+  - *Export Formats*: `obj`, `glb`, `stl`, `fbx`, `usdz`, `3mf`  
+• **`multicolor`** — 3D Model Multicolor (`/open-api/v1/muilticolor/create-task`)  
+  - *Models*: `multicolor` (with `--number-color` 1..8 or 0 max)  
   - *Export Formats*: `obj`, `glb`, `fbx`, `3mf`  
 
 ### Model Versions & Resolutions:
@@ -86,8 +87,8 @@ hi3d balance
   - `scene-portraitv2.0`: `1536pro`  
   - `scene-portraitv1.5`: `1536`  
 • **Depth Map / Relief Models**:  
-  - `pro`: `Pro` resolution tier  
-  - `base`: `Base` resolution tier  
+  - `pro`: Higher quality model (2K)  
+  - `base`: Standard quality model (1K)  
 • **Split Models**: `character`, `general`  
 • **Multicolor Models**: `multicolor`  
 
@@ -121,7 +122,7 @@ hi3d run image-to-3d \
 hi3d run relief \
   --image ./portrait.png \
   --model pro \
-  --resolution Pro \
+  --height-relief 2.5 \
   --format stl \
   --wait \
   --download ./reliefs
@@ -129,8 +130,23 @@ hi3d run relief \
 
 ### 4. 3D Model Split & Multicolor
 ```bash
-hi3d run split --image ./character.png --model character --format fbx --wait
-hi3d run multicolor --image ./colored.png --format 3mf --wait
+# Character Split
+hi3d run split \
+  --mesh ./character.glb \
+  --model character \
+  --part a \
+  --joint ball \
+  --format fbx \
+  --wait \
+  --download ./parts
+
+# Multicolor Mesh Generation
+hi3d run multicolor \
+  --mesh ./model.glb \
+  --number-color 4 \
+  --format 3mf \
+  --wait \
+  --download ./multicolor
 ```
 
 ### 5. Query Task Status & Download

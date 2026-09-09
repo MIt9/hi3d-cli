@@ -8,10 +8,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { Hi3DClient, Hi3DError, downloadFile } from "./client.js";
-import { CATEGORY_FORMATS, FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
+import { CATEGORY_FORMATS, CATEGORY_FORMAT_NAMES, CATEGORY_FORMAT_MAP, FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
 import { CONFIG_PATH, loadConfig, runSetup, saveConfig } from "./setup.js";
 
-export const VERSION = "0.1.7";
+export const VERSION = "0.1.8";
 
 export class UsageError extends Error {
   constructor(msg) {
@@ -87,7 +87,7 @@ USAGE:
 
 COMMANDS:
   setup                            Interactive setup wizard for Access Key, Secret Key, and Agent skill
-  config                           View or set CLI configuration (e.g. hi3d config --set-access-key AK --set-secret-key SK)
+  config                           View or set CLI configuration
   token                            Obtain or refresh JWT access token
   balance | credits                Check account credit balance
   models                           List supported Hi3D models, categories & formats
@@ -97,22 +97,45 @@ COMMANDS:
 CATEGORIES (for run/generate):
   image-to-3d                      Image to 3D / Multi-view to 3D (Formats: obj, glb, stl, fbx, usdz, 3mf)
   relief                           Image to 3D Relief (Formats: exr, png, stl, glb, 3mf, bmp)
-  split                            3D Model Split (Formats: obj, glb, stl, fbx, usdz)
+  split                            3D Model Split (Formats: obj, glb, stl, fbx, usdz, 3mf)
   multicolor                       3D Model Multicolor (Formats: obj, glb, fbx, 3mf)
 
 OPTIONS:
   --access-key <key>               Hi3D Access Key (ak_...)
   --secret-key <key>               Hi3D Secret Key (sk_...)
   --image <path>                   Input single image file
+  --image-url <url>                Input single image URL
   --multi-images <path1,path2>     Input multiple view image files (up to 4)
   --multi-images-bit <bit>         Bitmap string for multi_images (e.g. 1010)
-  --model <model_id>               Model version (e.g. hi3dv3.0, hitem3dv2.1, scene-portraitv2.1)
+  --mesh <path>                    Input 3D mesh model file (GLB, STL, OBJ)
+  --mesh-url <url>                 Input 3D mesh model URL
+  --model <model_id>               Model version (e.g. hi3dv3.0, pro, character, multicolor)
   --request-type <1|2|3>           1: mesh, 2: texture (staged), 3: both (all-in-one, default: 3)
   --format <format>                Output format (obj, glb, stl, fbx, usdz, 3mf, exr, png, bmp)
-  --resolution <tier>              Resolution tier (e.g. 2048quality, 2048master, 1536pro, 1536fast)
+  --resolution <tier>              Resolution tier (e.g. 2048quality, 2048master, Base, Pro)
   --pbr <0|1>                      PBR texture switch (default: 1)
   --face <count>                   Face count (100000..5000000)
   --shading <float>                De-shading strength (0.0..1.0, default 0.5)
+
+RELIEF OPTIONS:
+  --height-relief <float>          Relief height (0.1..50.0, default 1.3)
+  --rmbg <0|1>                     Remove background switch (0: disable, 1: enable, default 1)
+  --degree-rmbg <float>            Background removal strength (0.00..1.00, default 0.02)
+  --shape-base <0|1>               Base shape when rmbg=0 (0: square, 1: circle)
+  --thickness-base <float>         Base thickness in mm when rmbg=0 (0.1..20.0, default 1.0)
+  --width <int>                    Model width in mm (20..600, default 40)
+  --sculpmode <0|1>                Sculpt mode (0: emboss, 1: engrave, default 0)
+
+SPLIT OPTIONS:
+  --part <a|b|c|d|e|f>            Character split part template (a: 6-part, b: 5-part, etc.)
+  --joint <none|ball|dovetail|pin> Character joint type
+  --merge <yes|no>                 Merge connector with main body
+  --level <low|medium|high>        General model split granularity
+
+MULTICOLOR OPTIONS:
+  --number-color <0..8>            Number of colors (1..8 or 0 for max)
+
+OUTPUT & PIPELINE OPTIONS:
   --wait                           Wait for task completion
   --download <dir>                 Directory to download generated 3D files
   --dry-run                        Validate inputs without sending request
@@ -124,9 +147,9 @@ EXAMPLES:
   hi3d setup
   hi3d balance
   hi3d run image-to-3d --image ./chair.png --format obj --wait --download ./models
-  hi3d run relief --image ./portrait.png --format stl --resolution Pro --wait
-  hi3d run split --image ./character.png --model character --format fbx --wait
-  hi3d run multicolor --image ./colored.png --format 3mf --wait
+  hi3d run relief --image ./portrait.png --format stl --height-relief 2.5 --wait
+  hi3d run split --mesh ./character.glb --model character --part a --joint ball --wait
+  hi3d run multicolor --mesh ./model.glb --number-color 4 --format 3mf --wait
 `);
 }
 
@@ -141,8 +164,11 @@ export async function main(argv = process.argv.slice(2)) {
       "--api-key",
       "--set-key",
       "--image",
+      "--image-url",
       "--multi-images",
       "--multi-images-bit",
+      "--mesh",
+      "--mesh-url",
       "--model",
       "--request-type",
       "--format",
@@ -155,6 +181,20 @@ export async function main(argv = process.argv.slice(2)) {
       "--client-secret",
       "--token",
       "--category",
+      "--height-relief",
+      "--rmbg",
+      "--degree-rmbg",
+      "--shape-base",
+      "--thickness-base",
+      "--width",
+      "--sculpmode",
+      "--part",
+      "--joint",
+      "--merge",
+      "--level",
+      "--number-color",
+      "--response-format",
+      "--callback-url",
     ],
     alias: {
       "-h": "--help",
@@ -277,6 +317,9 @@ export async function main(argv = process.argv.slice(2)) {
     case "generate": {
       const category = subCmd || flags["--category"] || "image-to-3d";
       const imagePath = flags["--image"] || positionals[2];
+      const imageUrl = flags["--image-url"];
+      const meshPath = flags["--mesh"];
+      const meshUrl = flags["--mesh-url"];
       const multiImagesRaw = flags["--multi-images"];
 
       let multiImagePaths = null;
@@ -284,22 +327,49 @@ export async function main(argv = process.argv.slice(2)) {
         multiImagePaths = multiImagesRaw.split(",").map((s) => s.trim());
       }
 
-      if (!imagePath && (!multiImagePaths || multiImagePaths.length === 0)) {
-        throw new UsageError("Error: --image <path> or --multi-images <path1,path2> is required.");
+      if (category === "split" || category === "multicolor") {
+        if (!meshPath && !meshUrl) {
+          throw new UsageError(`Error: --mesh <path> or --mesh-url <url> is required for ${category} category.`);
+        }
+      } else {
+        if (!imagePath && !imageUrl && (!multiImagePaths || multiImagePaths.length === 0)) {
+          throw new UsageError(`Error: --image <path>, --image-url <url>, or --multi-images <path1,path2> is required for ${category} category.`);
+        }
       }
 
       const params = {
         category,
-        model: flags["--model"] || (category === "relief" ? "pro" : category === "multicolor" ? "multicolor" : category === "split" ? "general" : "hi3dv3.0"),
+        model: flags["--model"] || (category === "relief" ? "pro" : category === "multicolor" ? "multicolor" : category === "split" ? "character" : "hi3dv3.0"),
         request_type: flags["--request-type"] ? parseInt(flags["--request-type"], 10) : 3,
-        format: flags["--format"] || "glb",
+        format: flags["--format"] || (category === "relief" ? "stl" : "glb"),
         resolution: flags["--resolution"],
         pbr: flags["--pbr"] !== undefined ? parseInt(flags["--pbr"], 10) : undefined,
         shading: flags["--shading"] !== undefined ? parseFloat(flags["--shading"]) : undefined,
         face: flags["--face"] ? parseInt(flags["--face"], 10) : undefined,
         multi_images_bit: flags["--multi-images-bit"],
         imagePath,
+        imageUrl,
         multiImagePaths,
+        meshPath,
+        meshUrl,
+        // Relief specific
+        height_relief: flags["--height-relief"] !== undefined ? parseFloat(flags["--height-relief"]) : undefined,
+        rmbg: flags["--rmbg"] !== undefined ? parseInt(flags["--rmbg"], 10) : undefined,
+        degree_rmbg: flags["--degree-rmbg"] !== undefined ? parseFloat(flags["--degree-rmbg"]) : undefined,
+        shape_base: flags["--shape-base"] !== undefined ? parseInt(flags["--shape-base"], 10) : undefined,
+        thickness_base: flags["--thickness-base"],
+        width: flags["--width"] !== undefined ? parseInt(flags["--width"], 10) : undefined,
+        sculpmode: flags["--sculpmode"] !== undefined ? parseInt(flags["--sculpmode"], 10) : undefined,
+        // Split specific
+        part: flags["--part"],
+        joint: flags["--joint"],
+        merge: flags["--merge"],
+        level: flags["--level"],
+        // Multicolor specific
+        number_color: flags["--number-color"] !== undefined ? parseInt(flags["--number-color"], 10) : undefined,
+        // Common optional
+        response_format: flags["--response-format"],
+        callback_url: flags["--callback-url"],
       };
 
       if (flags["--dry-run"]) {
@@ -325,7 +395,9 @@ export async function main(argv = process.argv.slice(2)) {
 
         if (status.url && flags["--download"]) {
           const outDir = flags["--download"] === true ? "./out" : flags["--download"];
-          const fmtName = FORMAT_NAMES[params.format] || params.format || "glb";
+          const catFmtNames = CATEGORY_FORMAT_NAMES[category] || CATEGORY_FORMAT_NAMES["image-to-3d"];
+          const fmtCode = typeof params.format === "number" ? params.format : (CATEGORY_FORMAT_MAP[category]?.[String(params.format).toLowerCase()] || 2);
+          const fmtName = catFmtNames[fmtCode] || params.format || "glb";
           const outPath = path.join(outDir, `hi3d-${taskId}.${fmtName}`);
           console.log(`Downloading 3D model to ${outPath}...`);
           await downloadFile(status.url, outPath);
