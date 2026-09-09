@@ -23,6 +23,15 @@ export class TaskNotFound extends Hi3DError {
   }
 }
 
+function guessMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".glb") return "model/gltf-binary";
+  return "application/octet-stream";
+}
+
 /** Downloads file from URL to local file path. */
 export async function downloadFile(url, destPath) {
   const resp = await fetch(url, { signal: AbortSignal.timeout(300_000) });
@@ -145,16 +154,18 @@ export class Hi3DClient {
     // Single image upload
     if (params.imagePath) {
       const name = path.basename(params.imagePath);
+      const mime = guessMimeType(params.imagePath);
       const fileBuffer = fs.readFileSync(params.imagePath);
-      form.append("images", new Blob([fileBuffer]), name);
+      form.append("images", new Blob([fileBuffer], { type: mime }), name);
     }
 
     // Multi images upload
     if (Array.isArray(params.multiImagePaths) && params.multiImagePaths.length > 0) {
       for (const imgPath of params.multiImagePaths) {
         const name = path.basename(imgPath);
+        const mime = guessMimeType(imgPath);
         const fileBuffer = fs.readFileSync(imgPath);
-        form.append("multi_images", new Blob([fileBuffer]), name);
+        form.append("multi_images", new Blob([fileBuffer], { type: mime }), name);
       }
       if (params.multi_images_bit) {
         form.append("multi_images_bit", params.multi_images_bit);
@@ -165,8 +176,9 @@ export class Hi3DClient {
     if (params.mesh_url) form.append("mesh_url", params.mesh_url);
     if (params.meshPath) {
       const name = path.basename(params.meshPath);
+      const mime = guessMimeType(params.meshPath);
       const fileBuffer = fs.readFileSync(params.meshPath);
-      form.append("mesh", new Blob([fileBuffer]), name);
+      form.append("mesh", new Blob([fileBuffer], { type: mime }), name);
     }
 
     const data = await this._authedFetch(`${this.baseUrl}${endpoint}`, {

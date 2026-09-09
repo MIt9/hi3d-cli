@@ -11,7 +11,7 @@ import { Hi3DClient, Hi3DError, downloadFile } from "./client.js";
 import { FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
 import { CONFIG_PATH, loadConfig, runSetup, saveConfig } from "./setup.js";
 
-export const VERSION = "0.1.4";
+export const VERSION = "0.1.5";
 
 export class UsageError extends Error {
   constructor(msg) {
