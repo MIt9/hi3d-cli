@@ -41,18 +41,19 @@ export async function downloadFile(url, destPath) {
 export class Hi3DClient {
   constructor(options = {}) {
     this.baseUrl = options.baseUrl || BASE_URL;
-    this.apiKey = options.apiKey || options.token || process.env.HI3D_API_KEY || process.env.HI3D_API_TOKEN || null;
-    this.clientId = options.clientId || process.env.HI3D_CLIENT_ID || null;
-    this.clientSecret = options.clientSecret || process.env.HI3D_CLIENT_SECRET || null;
-    this.token = this.apiKey;
+    this.accessKey = options.accessKey || options.clientId || process.env.HI3D_ACCESS_KEY || process.env.HI3D_CLIENT_ID || null;
+    this.secretKey = options.secretKey || options.clientSecret || process.env.HI3D_SECRET_KEY || process.env.HI3D_CLIENT_SECRET || null;
+    this.token = options.token || process.env.HI3D_API_TOKEN || null;
   }
 
-  /** Gets Access Token via Basic Auth (clientId:clientSecret). */
-  async fetchToken(clientId = this.clientId, clientSecret = this.clientSecret) {
-    if (!clientId || !clientSecret) {
-      throw new Hi3DError("client_id and client_secret are required to fetch access token.");
+  /** Gets Access Token via Basic Auth (accessKey:secretKey). */
+  async fetchToken() {
+    const ak = this.accessKey;
+    const sk = this.secretKey;
+    if (!ak || !sk) {
+      throw new Hi3DError("Both Access Key and Secret Key are required to authenticate.");
     }
-    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    const credentials = Buffer.from(`${ak}:${sk}`).toString("base64");
     const resp = await fetch(`${this.baseUrl}${ENDPOINTS.token}`, {
       method: "POST",
       headers: {
@@ -65,38 +66,53 @@ export class Hi3DClient {
     const data = await resp.json().catch(() => ({}));
     if (data.code === 200 && data.data?.accessToken) {
       this.token = data.data.accessToken;
-      this.apiKey = this.token;
       return data.data;
     }
     throw new Hi3DError(data.msg || data.message || "Failed to obtain token", data.code);
   }
 
-  /** Ensures active token/API key exists. */
-  async ensureToken() {
-    if (this.token || this.apiKey) {
-      this.token = this.token || this.apiKey;
-      return this.token;
-    }
-    if (this.clientId && this.clientSecret) {
+  /** Ensures active JWT token exists, fetching a new token if needed. */
+  async ensureToken(forceRefresh = false) {
+    if (this.token && !forceRefresh) return this.token;
+    if (this.accessKey && this.secretKey) {
       await this.fetchToken();
       return this.token;
     }
-    throw new Hi3DError("Missing Hi3D API Key. Run 'hi3d setup' or set HI3D_API_KEY.");
+    if (this.token) return this.token;
+    throw new Hi3DError("Missing Access Key & Secret Key. Run 'hi3d setup' to configure.");
+  }
+
+  /** Wrapper for API calls with automatic token refresh on 401. */
+  async _authedFetch(url, init = {}) {
+    await this.ensureToken();
+    init.headers = {
+      ...(init.headers || {}),
+      Authorization: `Bearer ${this.token}`,
+    };
+
+    let resp = await fetch(url, init);
+    let data = await resp.json().catch(() => ({}));
+
+    // If token expired (code 401 or 40010000), refresh token once and retry
+    if (data.code === 401 || data.code === 40010000 || (data.msg && data.msg.toLowerCase().includes("expired"))) {
+      if (this.accessKey && this.secretKey) {
+        await this.ensureToken(true);
+        init.headers.Authorization = `Bearer ${this.token}`;
+        resp = await fetch(url, init);
+        data = await resp.json().catch(() => ({}));
+      }
+    }
+    return data;
   }
 
   /** Queries account credit balance. */
   async getBalance() {
-    await this.ensureToken();
-    const resp = await fetch(`${this.baseUrl}${ENDPOINTS.balance}`, {
+    const data = await this._authedFetch(`${this.baseUrl}${ENDPOINTS.balance}`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(30_000),
     });
 
-    const data = await resp.json().catch(() => ({}));
     if (data.code === 200) {
       return data.data ?? data;
     }
@@ -105,7 +121,6 @@ export class Hi3DClient {
 
   /** Submits 3D model generation task. */
   async submitTask(params = {}) {
-    await this.ensureToken();
     const category = params.category || "image-to-3d";
     const endpoint = ENDPOINTS.submitTask[category] || ENDPOINTS.submitTask["image-to-3d"];
 
@@ -154,16 +169,12 @@ export class Hi3DClient {
       form.append("mesh", new Blob([fileBuffer]), name);
     }
 
-    const resp = await fetch(`${this.baseUrl}${endpoint}`, {
+    const data = await this._authedFetch(`${this.baseUrl}${endpoint}`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
       body: form,
       signal: AbortSignal.timeout(120_000),
     });
 
-    const data = await resp.json().catch(() => ({}));
     if (data.code === 200 && data.data?.task_id) {
       return data.data;
     }
@@ -172,20 +183,15 @@ export class Hi3DClient {
 
   /** Queries status & result of a task. */
   async queryTask(taskId, category = "image-to-3d") {
-    await this.ensureToken();
     const endpoint = ENDPOINTS.queryTask[category] || ENDPOINTS.queryTask["image-to-3d"];
     const url = `${this.baseUrl}${endpoint}?task_id=${encodeURIComponent(taskId)}`;
 
-    const resp = await fetch(url, {
+    const data = await this._authedFetch(url, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(30_000),
     });
 
-    const data = await resp.json().catch(() => ({}));
     if (data.code === 200) {
       return data.data;
     }

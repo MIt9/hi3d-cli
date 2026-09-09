@@ -11,7 +11,7 @@ import { Hi3DClient, Hi3DError, downloadFile } from "./client.js";
 import { FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
 import { CONFIG_PATH, loadConfig, runSetup, saveConfig } from "./setup.js";
 
-export const VERSION = "0.1.2";
+export const VERSION = "0.1.3";
 
 export class UsageError extends Error {
   constructor(msg) {
@@ -86,8 +86,9 @@ USAGE:
   hi3d <command> [subcommand] [options]
 
 COMMANDS:
-  setup                            Interactive setup wizard for API key and Agent skill
-  config                           View or set CLI configuration (e.g. hi3d config --set-key YOUR_KEY)
+  setup                            Interactive setup wizard for Access Key, Secret Key, and Agent skill
+  config                           View or set CLI configuration (e.g. hi3d config --set-access-key AK --set-secret-key SK)
+  token                            Obtain or refresh JWT access token
   balance | credits                Check account credit balance
   models                           List supported Hi3D models & resolutions
   run | generate <category>       Submit 3D generation task
@@ -100,7 +101,8 @@ CATEGORIES (for run/generate):
   multicolor                       Generate 3D multicolor model
 
 OPTIONS:
-  --api-key <key>                  Hi3D API key (or set HI3D_API_KEY env)
+  --access-key <key>               Hi3D Access Key (ak_...)
+  --secret-key <key>               Hi3D Secret Key (sk_...)
   --image <path>                   Input single image file
   --multi-images <path1,path2>     Input multiple view image files (up to 4)
   --multi-images-bit <bit>         Bitmap string for multi_images (e.g. 1010)
@@ -120,7 +122,7 @@ OPTIONS:
 
 EXAMPLES:
   hi3d setup
-  hi3d config --set-key YOUR_API_KEY
+  hi3d config --set-access-key ak_c8ef... --set-secret-key sk_...
   hi3d balance
   hi3d run image-to-3d --image ./chair.png --format obj --wait --download ./models
   hi3d run relief --image ./portrait.png --resolution 1536pro --wait
@@ -131,6 +133,10 @@ export async function main(argv = process.argv.slice(2)) {
   const spec = {
     bool: ["--help", "-h", "--version", "-v", "--wait", "--dry-run", "--json", "--yes"],
     value: [
+      "--access-key",
+      "--secret-key",
+      "--set-access-key",
+      "--set-secret-key",
       "--api-key",
       "--set-key",
       "--image",
@@ -152,7 +158,8 @@ export async function main(argv = process.argv.slice(2)) {
     alias: {
       "-h": "--help",
       "-v": "--version",
-      "-k": "--api-key",
+      "-ak": "--access-key",
+      "-sk": "--secret-key",
       "-i": "--image",
       "-m": "--model",
       "-f": "--format",
@@ -178,11 +185,14 @@ export async function main(argv = process.argv.slice(2)) {
 
   // Load config & client
   const cfg = loadConfig();
-  const apiKey = flags["--api-key"] || flags["--token"] || cfg.api_key || cfg.token;
+  const accessKey = flags["--access-key"] || flags["--set-access-key"] || flags["--client-id"] || cfg.access_key || cfg.client_id;
+  const secretKey = flags["--secret-key"] || flags["--set-secret-key"] || flags["--client-secret"] || cfg.secret_key || cfg.client_secret;
+  const token = flags["--token"] || cfg.token;
+
   const clientOptions = {
-    apiKey,
-    clientId: flags["--client-id"] || cfg.client_id,
-    clientSecret: flags["--client-secret"] || cfg.client_secret,
+    accessKey,
+    secretKey,
+    token,
   };
   const client = new Hi3DClient(clientOptions);
 
@@ -190,7 +200,8 @@ export async function main(argv = process.argv.slice(2)) {
     case "setup": {
       await runSetup({
         yes: flags["--yes"],
-        apiKey: flags["--api-key"] || flags["--set-key"],
+        accessKey: flags["--access-key"] || flags["--set-access-key"],
+        secretKey: flags["--secret-key"] || flags["--set-secret-key"],
         clientId: flags["--client-id"],
         clientSecret: flags["--client-secret"],
         token: flags["--token"],
@@ -199,15 +210,18 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     case "config": {
-      if (flags["--set-key"] || flags["--api-key"]) {
-        const key = flags["--set-key"] || flags["--api-key"];
-        cfg.api_key = key;
-        cfg.token = key;
+      if (flags["--set-access-key"] || flags["--access-key"]) {
+        const ak = flags["--set-access-key"] || flags["--access-key"];
+        cfg.access_key = ak;
+        cfg.client_id = ak;
       }
-      if (flags["--client-id"]) cfg.client_id = flags["--client-id"];
-      if (flags["--client-secret"]) cfg.client_secret = flags["--client-secret"];
+      if (flags["--set-secret-key"] || flags["--secret-key"]) {
+        const sk = flags["--set-secret-key"] || flags["--secret-key"];
+        cfg.secret_key = sk;
+        cfg.client_secret = sk;
+      }
 
-      if (flags["--set-key"] || flags["--api-key"] || flags["--client-id"] || flags["--client-secret"]) {
+      if (flags["--set-access-key"] || flags["--access-key"] || flags["--set-secret-key"] || flags["--secret-key"]) {
         saveConfig(cfg);
         console.log("Configuration updated.");
       } else {
@@ -219,7 +233,6 @@ export async function main(argv = process.argv.slice(2)) {
     case "token": {
       const tokenInfo = await client.fetchToken();
       cfg.token = tokenInfo.accessToken;
-      cfg.api_key = tokenInfo.accessToken;
       saveConfig(cfg);
       if (flags["--json"]) {
         console.log(JSON.stringify(tokenInfo, null, 2));

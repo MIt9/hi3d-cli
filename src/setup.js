@@ -45,27 +45,35 @@ export async function runSetup(options = {}) {
   const isInteractive = Boolean(process.stdin.isTTY) && !options.yes;
   const cfg = loadConfig();
 
-  let apiKey = options.apiKey || options.token || process.env.HI3D_API_KEY || process.env.HI3D_API_TOKEN || cfg.api_key || cfg.token || "";
+  let accessKey = options.accessKey || options.clientId || process.env.HI3D_ACCESS_KEY || cfg.access_key || cfg.client_id || "";
+  let secretKey = options.secretKey || options.clientSecret || process.env.HI3D_SECRET_KEY || cfg.secret_key || cfg.client_secret || "";
 
   if (isInteractive) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    console.log("Step 1/2. Hi3D API Key (Get your key at https://hi3d.ai)");
-    apiKey = await promptText(rl, "Hi3D API Key", apiKey);
+    console.log("Step 1/2. Hi3D API Keys (from https://platform.hi3d.ai/console/apiKey)");
+    accessKey = await promptText(rl, "Access Key (ak_...)", accessKey);
+    secretKey = await promptText(rl, "Secret Key (sk_...)", secretKey);
     rl.close();
   }
 
-  if (apiKey) {
-    cfg.api_key = apiKey;
-    cfg.token = apiKey;
+  if (accessKey) {
+    cfg.access_key = accessKey;
+    cfg.client_id = accessKey;
+  }
+  if (secretKey) {
+    cfg.secret_key = secretKey;
+    cfg.client_secret = secretKey;
   }
 
-  let statusText = "key saved";
+  let statusText = "keys saved";
 
-  if (apiKey) {
+  if (accessKey && secretKey) {
     try {
-      const client = new Hi3DClient({ apiKey });
+      const client = new Hi3DClient({ accessKey, secretKey });
+      const tokRes = await client.fetchToken();
+      cfg.token = tokRes.accessToken;
       const balance = await client.getBalance();
-      statusText = `verified (Balance: ${JSON.stringify(balance)})`;
+      statusText = `verified & active (Balance: ${JSON.stringify(balance)})`;
     } catch (err) {
       statusText = `saved (verification warning: ${err.message})`;
     }
@@ -75,7 +83,8 @@ export async function runSetup(options = {}) {
 
   console.log("\nSetup Summary:");
   console.log(`  Config File: ${CONFIG_PATH}`);
-  console.log(`  API Key:     ${cfg.api_key ? "set" : "not set"}`);
+  console.log(`  Access Key:  ${cfg.access_key ? "set" : "not set"}`);
+  console.log(`  Secret Key:  ${cfg.secret_key ? "set" : "not set"}`);
   console.log(`  Status:      ${statusText}`);
 
   console.log("\nStep 2/2. AI Agent Skill hi3d-generate");
