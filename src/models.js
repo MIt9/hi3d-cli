@@ -19,7 +19,7 @@ export const ENDPOINTS = {
     "split": "/open-api/v1/split-query-task",
     "multicolor": "/open-api/v1/multicolor-query-task",
   },
-  balance: "/open-api/v1/query-balance",
+  balance: "/open-api/v1/balance",
 };
 
 export const REQUEST_TYPES = {
