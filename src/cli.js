@@ -11,7 +11,7 @@ import { Hi3DClient, Hi3DError, downloadFile } from "./client.js";
 import { FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
 import { CONFIG_PATH, loadConfig, runSetup, saveConfig } from "./setup.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 export class UsageError extends Error {
   constructor(msg) {
@@ -87,8 +87,7 @@ USAGE:
 
 COMMANDS:
   setup                            Interactive setup wizard for API key and Agent skill
-  config                           View or set CLI configuration
-  token                            Obtain or verify access token
+  config                           View or set CLI configuration (e.g. hi3d config --set-key YOUR_KEY)
   balance | credits                Check account credit balance
   models                           List supported Hi3D models & resolutions
   run | generate <category>       Submit 3D generation task
@@ -101,6 +100,7 @@ CATEGORIES (for run/generate):
   multicolor                       Generate 3D multicolor model
 
 OPTIONS:
+  --api-key <key>                  Hi3D API key (or set HI3D_API_KEY env)
   --image <path>                   Input single image file
   --multi-images <path1,path2>     Input multiple view image files (up to 4)
   --multi-images-bit <bit>         Bitmap string for multi_images (e.g. 1010)
@@ -120,8 +120,8 @@ OPTIONS:
 
 EXAMPLES:
   hi3d setup
+  hi3d config --set-key YOUR_API_KEY
   hi3d balance
-  hi3d models
   hi3d run image-to-3d --image ./chair.png --format obj --wait --download ./models
   hi3d run relief --image ./portrait.png --resolution 1536pro --wait
 `);
@@ -131,6 +131,8 @@ export async function main(argv = process.argv.slice(2)) {
   const spec = {
     bool: ["--help", "-h", "--version", "-v", "--wait", "--dry-run", "--json", "--yes"],
     value: [
+      "--api-key",
+      "--set-key",
       "--image",
       "--multi-images",
       "--multi-images-bit",
@@ -150,6 +152,7 @@ export async function main(argv = process.argv.slice(2)) {
     alias: {
       "-h": "--help",
       "-v": "--version",
+      "-k": "--api-key",
       "-i": "--image",
       "-m": "--model",
       "-f": "--format",
@@ -175,10 +178,11 @@ export async function main(argv = process.argv.slice(2)) {
 
   // Load config & client
   const cfg = loadConfig();
+  const apiKey = flags["--api-key"] || flags["--token"] || cfg.api_key || cfg.token;
   const clientOptions = {
+    apiKey,
     clientId: flags["--client-id"] || cfg.client_id,
     clientSecret: flags["--client-secret"] || cfg.client_secret,
-    token: flags["--token"] || cfg.token,
   };
   const client = new Hi3DClient(clientOptions);
 
@@ -186,6 +190,7 @@ export async function main(argv = process.argv.slice(2)) {
     case "setup": {
       await runSetup({
         yes: flags["--yes"],
+        apiKey: flags["--api-key"] || flags["--set-key"],
         clientId: flags["--client-id"],
         clientSecret: flags["--client-secret"],
         token: flags["--token"],
@@ -194,10 +199,15 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     case "config": {
+      if (flags["--set-key"] || flags["--api-key"]) {
+        const key = flags["--set-key"] || flags["--api-key"];
+        cfg.api_key = key;
+        cfg.token = key;
+      }
       if (flags["--client-id"]) cfg.client_id = flags["--client-id"];
       if (flags["--client-secret"]) cfg.client_secret = flags["--client-secret"];
-      if (flags["--token"]) cfg.token = flags["--token"];
-      if (flags["--client-id"] || flags["--client-secret"] || flags["--token"]) {
+
+      if (flags["--set-key"] || flags["--api-key"] || flags["--client-id"] || flags["--client-secret"]) {
         saveConfig(cfg);
         console.log("Configuration updated.");
       } else {
@@ -209,6 +219,7 @@ export async function main(argv = process.argv.slice(2)) {
     case "token": {
       const tokenInfo = await client.fetchToken();
       cfg.token = tokenInfo.accessToken;
+      cfg.api_key = tokenInfo.accessToken;
       saveConfig(cfg);
       if (flags["--json"]) {
         console.log(JSON.stringify(tokenInfo, null, 2));

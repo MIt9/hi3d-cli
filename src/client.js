@@ -41,9 +41,10 @@ export async function downloadFile(url, destPath) {
 export class Hi3DClient {
   constructor(options = {}) {
     this.baseUrl = options.baseUrl || BASE_URL;
+    this.apiKey = options.apiKey || options.token || process.env.HI3D_API_KEY || process.env.HI3D_API_TOKEN || null;
     this.clientId = options.clientId || process.env.HI3D_CLIENT_ID || null;
     this.clientSecret = options.clientSecret || process.env.HI3D_CLIENT_SECRET || null;
-    this.token = options.token || process.env.HI3D_API_TOKEN || null;
+    this.token = this.apiKey;
   }
 
   /** Gets Access Token via Basic Auth (clientId:clientSecret). */
@@ -64,19 +65,23 @@ export class Hi3DClient {
     const data = await resp.json().catch(() => ({}));
     if (data.code === 200 && data.data?.accessToken) {
       this.token = data.data.accessToken;
+      this.apiKey = this.token;
       return data.data;
     }
     throw new Hi3DError(data.msg || data.message || "Failed to obtain token", data.code);
   }
 
-  /** Ensures active token exists. */
+  /** Ensures active token/API key exists. */
   async ensureToken() {
-    if (this.token) return this.token;
+    if (this.token || this.apiKey) {
+      this.token = this.token || this.apiKey;
+      return this.token;
+    }
     if (this.clientId && this.clientSecret) {
       await this.fetchToken();
       return this.token;
     }
-    throw new Hi3DError("Missing API token or client credentials. Run 'hi3d setup' or set HI3D_API_TOKEN.");
+    throw new Hi3DError("Missing Hi3D API Key. Run 'hi3d setup' or set HI3D_API_KEY.");
   }
 
   /** Queries account credit balance. */

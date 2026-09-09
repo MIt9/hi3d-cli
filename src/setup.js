@@ -45,48 +45,38 @@ export async function runSetup(options = {}) {
   const isInteractive = Boolean(process.stdin.isTTY) && !options.yes;
   const cfg = loadConfig();
 
-  let clientId = options.clientId || process.env.HI3D_CLIENT_ID || cfg.client_id || "";
-  let clientSecret = options.clientSecret || process.env.HI3D_CLIENT_SECRET || cfg.client_secret || "";
-  let token = options.token || process.env.HI3D_API_TOKEN || cfg.token || "";
+  let apiKey = options.apiKey || options.token || process.env.HI3D_API_KEY || process.env.HI3D_API_TOKEN || cfg.api_key || cfg.token || "";
 
   if (isInteractive) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    console.log("Step 1/2. Hi3D API Credentials (from https://hi3d.ai)");
-    clientId = await promptText(rl, "Client ID", clientId);
-    clientSecret = await promptText(rl, "Client Secret", clientSecret);
-    if (!clientId && !clientSecret) {
-      token = await promptText(rl, "Direct Access Token (optional if ID/Secret set)", token);
-    }
+    console.log("Step 1/2. Hi3D API Key (Get your key at https://hi3d.ai)");
+    apiKey = await promptText(rl, "Hi3D API Key", apiKey);
     rl.close();
   }
 
-  if (clientId) cfg.client_id = clientId;
-  if (clientSecret) cfg.client_secret = clientSecret;
-  if (token) cfg.token = token;
+  if (apiKey) {
+    cfg.api_key = apiKey;
+    cfg.token = apiKey;
+  }
 
-  let balanceInfo = "not verified";
-  let tokenStatus = "missing";
+  let statusText = "key saved";
 
-  if (clientId && clientSecret) {
+  if (apiKey) {
     try {
-      const client = new Hi3DClient({ clientId, clientSecret });
-      const tokRes = await client.fetchToken();
-      cfg.token = tokRes.accessToken;
-      tokenStatus = "verified & saved";
+      const client = new Hi3DClient({ apiKey });
+      const balance = await client.getBalance();
+      statusText = `verified (Balance: ${JSON.stringify(balance)})`;
     } catch (err) {
-      console.warn(`⚠️ Could not verify token: ${err.message}`);
+      statusText = `saved (verification warning: ${err.message})`;
     }
-  } else if (token) {
-    tokenStatus = "token provided";
   }
 
   saveConfig(cfg);
 
   console.log("\nSetup Summary:");
-  console.log(`  Config File:   ${CONFIG_PATH}`);
-  console.log(`  Client ID:     ${cfg.client_id ? "set" : "not set"}`);
-  console.log(`  Client Secret: ${cfg.client_secret ? "set" : "not set"}`);
-  console.log(`  Token Status:  ${tokenStatus}`);
+  console.log(`  Config File: ${CONFIG_PATH}`);
+  console.log(`  API Key:     ${cfg.api_key ? "set" : "not set"}`);
+  console.log(`  Status:      ${statusText}`);
 
   console.log("\nStep 2/2. AI Agent Skill hi3d-generate");
   console.log("  To install the skill for AI Agents (Antigravity, Claude, Cursor), run:");
