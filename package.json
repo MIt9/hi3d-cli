@@ -35,5 +35,8 @@
     "agent-skill"
   ],
   "author": "hi3d-cli",
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }
