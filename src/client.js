@@ -239,9 +239,13 @@ export class Hi3DClient {
 
     if (params.callback_url) form.append("callback_url", params.callback_url);
 
+    const extraHeaders = {};
+    if (params._idempotencyKey) extraHeaders["X-Idempotency-Key"] = params._idempotencyKey;
+
     const data = await this._authedFetch(`${this.baseUrl}${endpoint}`, {
       method: "POST",
       body: form,
+      headers: extraHeaders,
       signal: AbortSignal.timeout(120_000),
     });
 

@@ -10,6 +10,7 @@ import path from "node:path";
 import { Hi3DClient, Hi3DError, downloadFile } from "./client.js";
 import { CATEGORY_FORMATS, CATEGORY_FORMAT_NAMES, CATEGORY_FORMAT_MAP, FORMAT_MAP, FORMAT_NAMES, MODELS, REQUEST_TYPES } from "./models.js";
 import { CONFIG_PATH, loadConfig, runSetup, saveConfig } from "./setup.js";
+import { computeIdempotencyKey, findRecentEntry, createPendingEntry, updateEntryWithTaskId, removePendingEntry, RECOVER_WINDOW_MS, PENDING_WINDOW_MS } from "./idempotency.js";
 
 export const VERSION = "0.1.8";
 
@@ -139,6 +140,7 @@ OUTPUT & PIPELINE OPTIONS:
   --wait                           Wait for task completion
   --download <dir>                 Directory to download generated 3D files
   --dry-run                        Validate inputs without sending request
+  --force                          Bypass idempotency guard and force new submission
   --json                           Output JSON format
   -h, --help                       Show help
   -v, --version                    Show version
@@ -155,7 +157,7 @@ EXAMPLES:
 
 export async function main(argv = process.argv.slice(2)) {
   const spec = {
-    bool: ["--help", "-h", "--version", "-v", "--wait", "--dry-run", "--json", "--yes"],
+    bool: ["--help", "-h", "--version", "-v", "--wait", "--dry-run", "--json", "--yes", "--force"],
     value: [
       "--access-key",
       "--secret-key",
@@ -373,19 +375,86 @@ export async function main(argv = process.argv.slice(2)) {
       };
 
       if (flags["--dry-run"]) {
+        const _key = computeIdempotencyKey(params);
         console.log(`Hi3D (${category}) — Request not sent (--dry-run):`);
-        console.log(JSON.stringify(params, null, 2));
+        console.log(JSON.stringify({ ...params, _idempotencyKey: _key }, null, 2));
+        if (!flags["--force"]) {
+          const _recent = findRecentEntry(_key, RECOVER_WINDOW_MS);
+          if (_recent?.task_id) {
+            console.log(`(dry-run) Would recover task ${_recent.task_id} from ${Math.round((Date.now() - _recent.timestamp) / 1000)}s ago to avoid duplicate`);
+          }
+          const _pending = findRecentEntry(_key, PENDING_WINDOW_MS);
+          if (_pending && !_pending.task_id) {
+            console.log(`(dry-run) Would block due to pending submission ${Math.round((Date.now() - _pending.timestamp) / 1000)}s ago — use --force to bypass`);
+          }
+        }
         return;
       }
 
-      console.log(`Submitting Hi3D (${category}) task...`);
-      const result = await client.submitTask(params);
-      const taskId = result.task_id;
+      // Idempotency / recovery guardrails — prevent duplicate paid generations
+      const idempotencyKey = computeIdempotencyKey(params);
+      params._idempotencyKey = idempotencyKey;
+      const force = Boolean(flags["--force"]);
+      let taskId;
+      let recovered = false;
 
-      if (flags["--json"]) {
-        console.log(JSON.stringify(result, null, 2));
-      } else {
-        console.log(`Task submitted successfully!\n  Task ID: ${taskId}`);
+      if (!force) {
+        const recent = findRecentEntry(idempotencyKey, RECOVER_WINDOW_MS);
+        if (recent && recent.task_id) {
+          try {
+            const existing = await client.queryTask(recent.task_id, category);
+            const state = (existing.state || "").toLowerCase();
+            if (state !== "failed") {
+              const ago = Math.round((Date.now() - recent.timestamp) / 1000);
+              console.log(`♻️  Recovered previous task ${recent.task_id} submitted ${ago}s ago for same image/params.`);
+              console.log(`   State: ${existing.state}. Reusing to avoid duplicate paid generation.`);
+              console.log(`   Use --force to submit a new task anyway.`);
+              taskId = recent.task_id;
+              recovered = true;
+              if (flags["--json"]) console.log(JSON.stringify({ ...existing, _recovered: true, _idempotencyKey: idempotencyKey }, null, 2));
+            }
+          } catch (e) {
+            // TaskNotFound or query failed — proceed to new submission
+          }
+        }
+        if (!recovered) {
+          const pending = findRecentEntry(idempotencyKey, PENDING_WINDOW_MS);
+          if (pending && !pending.task_id) {
+            const ago = Math.round((Date.now() - pending.timestamp) / 1000);
+            console.error(`⚠️  Previous submission for same image/params ${ago}s ago failed before task_id was received (network drop).`);
+            console.error(`   It may have succeeded server-side and already been charged.`);
+            console.error(`   Retrying without --force will create a duplicate paid task.`);
+            console.error(`   To confirm duplicate submission, rerun with --force.`);
+            throw new UsageError("Aborted to prevent duplicate paid generation. Use --force to override.");
+          }
+        }
+      }
+
+      if (!recovered) {
+        createPendingEntry(idempotencyKey, params);
+        console.log(`Submitting Hi3D (${category}) task...`);
+        let result;
+        try {
+          result = await client.submitTask(params);
+        } catch (err) {
+          const isApiError = err instanceof Hi3DError;
+          const isNetworkError = !isApiError && (err.cause?.code || (err.message && /fetch|network|timeout|EAI_AGAIN|UND_ERR/i.test(err.message)) || err.name === "TypeError");
+          if (isApiError) {
+            // API explicitly rejected (balance, validation) — no task created server-side, safe to retry
+            removePendingEntry(idempotencyKey);
+          } else if (isNetworkError) {
+            console.error(`❌ Network error during submission — task may have succeeded server-side.`);
+            console.error(`   Your pending submission is cached for ${PENDING_WINDOW_MS / 1000}s. Retry without --force will be blocked.`);
+          }
+          throw err;
+        }
+        taskId = result.task_id;
+        updateEntryWithTaskId(idempotencyKey, taskId, "submitted");
+        if (flags["--json"]) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(`Task submitted successfully!\n  Task ID: ${taskId}`);
+        }
       }
 
       if (flags["--wait"] || flags["--download"]) {
