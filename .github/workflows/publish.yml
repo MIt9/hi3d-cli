@@ -1,0 +1,27 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - run: npm ci || npm install
+      - run: npm test
+      - name: Publish to npm (OIDC trusted publishing)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Fallback: if trusted publishing not configured, set NPM_TOKEN secret in repo settings
+      # and the above will use it. For OIDC, configure package at https://www.npmjs.com/package/hi3d-cli/access
