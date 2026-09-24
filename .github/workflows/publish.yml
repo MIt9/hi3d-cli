@@ -19,6 +19,26 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm install
       - run: npm test
+      - name: Debug OIDC claims
+        run: |
+          echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_WORKFLOW=$GITHUB_WORKFLOW"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "Requesting OIDC token for sigstore..."
+          OIDC_JSON=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sigstore" || echo "{}")
+          echo "OIDC raw: $OIDC_JSON" | head -c 500
+          echo ""
+          PAYLOAD=$(echo "$OIDC_JSON" | jq -r '.value' 2>/dev/null | cut -d. -f2)
+          if [ -n "$PAYLOAD" ] && [ "$PAYLOAD" != "null" ]; then
+            echo "$PAYLOAD" | base64 -d 2>/dev/null | jq . 2>/dev/null | head -100
+          else
+            echo "No OIDC value, trying registry audience..."
+            OIDC2=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://registry.npmjs.org" || echo "{}")
+            echo "$OIDC2" | head -c 500
+            PAYLOAD2=$(echo "$OIDC2" | jq -r '.value' 2>/dev/null | cut -d. -f2)
+            echo "$PAYLOAD2" | base64 -d 2>/dev/null | jq . 2>/dev/null | head -100
+          fi
       - name: Publish to npm (OIDC trusted publishing)
         run: npm publish --provenance --access public
       # Trusted publishing via OIDC (id-token: write) — no NPM_TOKEN needed.
