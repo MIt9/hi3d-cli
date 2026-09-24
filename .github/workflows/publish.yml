@@ -39,7 +39,9 @@ jobs:
             PAYLOAD2=$(echo "$OIDC2" | jq -r '.value' 2>/dev/null | cut -d. -f2)
             echo "$PAYLOAD2" | base64 -d 2>/dev/null | jq . 2>/dev/null | head -100
           fi
-      - name: Publish to npm (OIDC trusted publishing)
+      - name: Publish to npm
         run: npm publish --provenance --access public
-      # Trusted publishing via OIDC (id-token: write) — no NPM_TOKEN needed.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # OIDC Trusted Publishing (id-token: write) fallback — if NPM_TOKEN not set, OIDC will be used
       # Configure at https://www.npmjs.com/package/hi3d-cli/access → Trusted Publishers → MIt9/hi3d-cli publish.yml
