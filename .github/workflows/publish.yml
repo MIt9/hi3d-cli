@@ -8,7 +8,6 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: git
     permissions:
       contents: read
       id-token: write
@@ -21,6 +20,6 @@ jobs:
       - run: npm install
       - run: npm test
       - name: Publish to npm (OIDC trusted publishing)
-        run: npm publish --access public
+        run: npm publish --provenance --access public
       # Trusted publishing via OIDC (id-token: write) — no NPM_TOKEN needed.
       # Configure at https://www.npmjs.com/package/hi3d-cli/access → Trusted Publishers → MIt9/hi3d-cli publish.yml
