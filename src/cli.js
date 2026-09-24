@@ -139,11 +139,17 @@ MULTICOLOR OPTIONS:
 OUTPUT & PIPELINE OPTIONS:
   --wait                           Wait for task completion
   --download <dir>                 Directory to download generated 3D files
-  --dry-run                        Validate inputs without sending request
-  --force                          Bypass idempotency guard and force new submission
+  --dry-run                        Validate inputs without sending request (shows _idempotencyKey)
+  --force                          Bypass idempotency guard and force new submission (10m recovery / 5m pending lock)
   --json                           Output JSON format
   -h, --help                       Show help
   -v, --version                    Show version
+
+IDEMPOTENCY (paid generations):
+  Identical requests (same image content + model/format/resolution) within 10m reuse
+  the previous task_id via queryTask to avoid double charge. If the previous
+  request failed before task_id was received, retry is blocked for 5m unless
+  --force is used. Every submit sends X-Idempotency-Key. Cache: ~/.hi3d/task-cache.json
 
 EXAMPLES:
   hi3d setup

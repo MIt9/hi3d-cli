@@ -156,6 +156,34 @@ hi3d run multicolor \
 hi3d status <task_id> --download ./models
 ```
 
+### 6. Safe Retries & Idempotency (paid generations)
+
+Network drops after the API accepts a task but before the CLI saves `task_id` can cause duplicate paid generations on retry.
+
+`hi3d` prevents this locally:
+
+- **10-minute recovery** — identical request (same image content + `model`/`format`/`resolution` etc.) within 10m reuses the previous `task_id`: `♻️ Recovered previous task <id> submitted Xs ago … Use --force to submit a new task anyway.` It `queryTask`s the cached ID first; if that task is still pending/success it is reused.
+- **5-minute pending lock** — if the previous identical request failed *before* `task_id` was received (network timeout), the next identical request is blocked: `⚠️ Previous submission … failed before task_id was received … Use --force to override.` This covers the ambiguous window where the job may have succeeded server-side.
+- **`--force`** — bypass both guards and force a new submission: `hi3d run image-to-3d --image ./chair.png --wait --force`
+- **`X-Idempotency-Key`** — every `submit` sends `X-Idempotency-Key: sha256(params+imageHash)` (first 32 hex chars) for server-side deduplication if the API honors it; no effect otherwise.
+- **API errors** (e.g. `balance is not enough` `code=30010000`) clear the pending marker immediately, so retry without `--force` is allowed — only network-level failures keep the lock.
+- **Dry-run** shows the would-be behavior: `--dry-run` prints `_idempotencyKey` and hints `(dry-run) Would recover task …` / `Would block due to pending …`
+
+Cache: `~/.hi3d/task-cache.json` (TTL 24h, last 50 entries, `chmod 600`). Delete it to clear history.
+
+```bash
+# Normal retry is safe — reuses previous task
+hi3d run image-to-3d --image ./chair.png --wait
+# → ♻️ Recovered previous task abc123 submitted 23s ago …
+
+# Force duplicate (you accept double charge)
+hi3d run image-to-3d --image ./chair.png --wait --force
+
+# Dry-run shows key without spending credits
+hi3d run image-to-3d --image ./chair.png --model hitem3dv1.5 --resolution 512 --dry-run --json
+# → { ..., "_idempotencyKey": "a08013ac..." }
+```
+
 ---
 
 ## 🤖 AI Agent Skill Integration
