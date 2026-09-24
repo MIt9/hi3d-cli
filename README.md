@@ -8,6 +8,8 @@
 
 # Hi3D CLI (`hi3d`)
 
+> **Generate 3D models from text or image in one command** — CLI for HI3D (GLB/OBJ/STL/FBX/USDZ) for Humans & AI Agents.
+
 [![npm](https://img.shields.io/npm/v/hi3d-cli.svg)](https://www.npmjs.com/package/hi3d-cli)
 [![node](https://img.shields.io/node/v/hi3d-cli.svg)](https://nodejs.org)
 [![license](https://img.shields.io/npm/l/hi3d-cli.svg)](LICENSE)
